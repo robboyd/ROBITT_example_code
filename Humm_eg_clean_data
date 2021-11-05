@@ -1,0 +1,88 @@
+##### clean GBIF data #####
+
+library(countrycode)
+library(CoordinateCleaner)
+library(dplyr)
+library(ggplot2)
+library(rgbif)
+library(sp)
+library(rnaturalearthdata)
+
+## load GBIF data
+
+dat <- read.csv("C:/Users/Rob.Lenovo-PC/Documents/surpass/Data/GBIF/07.04.21/troch.csv",
+                na.strings = c("", "NA"))
+
+dat$countryCode <-  countrycode(dat$countryCode, origin =  'iso2c', destination = 'iso3c')
+
+## filter to Ecuador and Colombia 
+
+dat <- dat[dat$countryCode %in% c("COL", "ECU"), ]
+
+## drop records without coords
+
+dat <- dat[!is.na(dat$decimalLatitude), ]
+
+dat <- dat[!is.na(dat$decimalLongitude), ]
+
+dat$identifier <- "pre clean"
+
+## select columns needed for occAssess
+
+dat <- dat[, c("species", "decimalLongitude", "decimalLatitude", "year", "coordinateUncertaintyInMeters", "identifier", "countryCode")]
+
+## clean the data
+
+cleanDat <- clean_coordinates(x = dat,
+                              lon = "decimalLongitude",
+                              lat = "decimalLatitude",
+                              value = "clean",
+                              species = "species",
+                              countries = "countryCode",
+                              tests = c("capitals", "centroids", "equal","gbif", "institutions",
+                                        "zeros", "countries"))
+
+cleanDat$identifier <- "post clean"
+
+#clean_dataset(x = cleanDat[, c("decimalLongitude", "decimalLatitude", "species", "identifier")],
+#              ds = "identifier",
+#              lon = "decimalLongitude",
+#              lat = "decimalLatitude")
+
+
+cleanDat <- cleanDat[, -7] # drop country codes
+
+## compare cleaned and non-cleaned data 
+
+recs <- assessRecordNumber(dat = rbind(dat[,-7], cleanDat),
+                           species = "species",
+                           year = "year", 
+                           x = "decimalLongitude",
+                           y = "decimalLatitude",
+                           spatialUncertainty = "coordinateUncertaintyInMeters",
+                           identifier = "identifier",
+                           periods = periods)
+
+
+map <- assessSpatialCov(dat = rbind(dat[,-7], cleanDat),
+                         species = "species",
+                         year = "year", 
+                         x = "decimalLongitude",
+                         y = "decimalLatitude",
+                         spatialUncertainty = "coordinateUncertaintyInMeters",
+                         identifier = "identifier",
+                         periods = periods,
+                         output = "density", 
+                         res = 1,
+                        countries = c("Ecuador", "Colombia"),
+                        logCount = T)
+
+length(cleanDat$coordinateUncertaintyInMeters[is.na(cleanDat$coordinateUncertaintyInMeters)]) / length(cleanDat$coordinateUncertaintyInMeters)
+
+colnames(cleanDat) <- c("species", "x", "y", "year", "spatialUncertainty", "identifier")
+
+write.csv(cleanDat,
+          "C:/Users/Rob.Lenovo-PC/Documents/surpass/Data/GBIF/07.04.21/troch_col_ecu.csv",
+          row.names = F)
+
+
